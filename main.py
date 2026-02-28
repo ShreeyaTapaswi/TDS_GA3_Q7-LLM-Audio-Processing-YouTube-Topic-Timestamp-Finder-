@@ -43,11 +43,12 @@ def seconds_to_hhmmss(seconds: float) -> str:
 @app.post("/ask")
 async def ask(request: AskRequest):
     try:
-        # Extract video ID
         video_id = extract_video_id(request.video_url)
 
-        # Get transcript
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        # New API usage
+        ytt = YouTubeTranscriptApi()
+        transcript_obj = ytt.fetch(video_id)
+        transcript = [{"start": s.start, "text": s.text} for s in transcript_obj]
 
         # Format transcript with timestamps
         transcript_text = ""
