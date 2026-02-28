@@ -29,24 +29,20 @@ async def ask(request: AskRequest):
     uploaded_file = None
     
     try:
-        # Step 1: Download audio using yt-dlp
-        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp_path = tmp.name
 
         subprocess.run([
             "yt-dlp",
-            "-x", "--audio-format", "m4a",
-            "--audio-quality", "0",
-            "-o", tmp_path,
+            "-f", "bestaudio",
             "--no-playlist",
             "--remote-components", "ejs:github",
+            "-o", tmp_path,
             request.video_url
         ], check=True, capture_output=True)
 
-        # Step 2: Upload to Gemini Files API
-        uploaded_file = genai.upload_file(tmp_path, mime_type="audio/mp4")
+        uploaded_file = genai.upload_file(tmp_path, mime_type="audio/webm")
 
-        # Step 3: Poll until ACTIVE
         while uploaded_file.state.name == "PROCESSING":
             time.sleep(2)
             uploaded_file = genai.get_file(uploaded_file.name)
@@ -54,7 +50,6 @@ async def ask(request: AskRequest):
         if uploaded_file.state.name != "ACTIVE":
             raise HTTPException(status_code=500, detail="File upload failed")
 
-        # Step 4: Ask Gemini for timestamp
         model = genai.GenerativeModel("gemini-2.0-flash")
         
         prompt = f"""Listen to this audio and find when the topic "{request.topic}" is first spoken or discussed.
@@ -81,7 +76,6 @@ Just the timestamp, nothing else."""
         result = json.loads(response.text)
         timestamp = result["timestamp"]
 
-        # Ensure HH:MM:SS format
         parts = timestamp.split(":")
         if len(parts) == 2:
             timestamp = "00:" + timestamp
@@ -97,7 +91,6 @@ Just the timestamp, nothing else."""
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Cleanup
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
         if uploaded_file:
