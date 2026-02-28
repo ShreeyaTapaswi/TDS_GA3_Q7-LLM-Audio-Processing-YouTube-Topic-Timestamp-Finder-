@@ -1,11 +1,10 @@
 import os
-import time
-import tempfile
-import subprocess
 import json
+import re
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from youtube_transcript_api import YouTubeTranscriptApi
 import google.generativeai as genai
 
 app = FastAPI()
@@ -23,41 +22,51 @@ class AskRequest(BaseModel):
     video_url: str
     topic: str
 
+def extract_video_id(url: str) -> str:
+    patterns = [
+        r'(?:v=|\/)([0-9A-Za-z_-]{11})',
+        r'youtu\.be\/([0-9A-Za-z_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    raise ValueError("Could not extract video ID")
+
+def seconds_to_hhmmss(seconds: float) -> str:
+    seconds = int(seconds)
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
 @app.post("/ask")
 async def ask(request: AskRequest):
-    tmp_path = None
-    uploaded_file = None
-    
     try:
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-            tmp_path = tmp.name
+        # Extract video ID
+        video_id = extract_video_id(request.video_url)
 
-        subprocess.run([
-            "yt-dlp",
-            "-f", "bestaudio",
-            "--no-playlist",
-            "--remote-components", "ejs:github",
-            "-o", tmp_path,
-            request.video_url
-        ], check=True, capture_output=True)
+        # Get transcript
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
 
-        uploaded_file = genai.upload_file(tmp_path, mime_type="audio/webm")
+        # Format transcript with timestamps
+        transcript_text = ""
+        for entry in transcript:
+            ts = seconds_to_hhmmss(entry['start'])
+            transcript_text += f"[{ts}] {entry['text']}\n"
 
-        while uploaded_file.state.name == "PROCESSING":
-            time.sleep(2)
-            uploaded_file = genai.get_file(uploaded_file.name)
-
-        if uploaded_file.state.name != "ACTIVE":
-            raise HTTPException(status_code=500, detail="File upload failed")
-
+        # Ask Gemini to find the timestamp
         model = genai.GenerativeModel("gemini-2.0-flash")
-        
-        prompt = f"""Listen to this audio and find when the topic "{request.topic}" is first spoken or discussed.
-Return ONLY the timestamp in HH:MM:SS format (e.g. 00:05:47).
-Just the timestamp, nothing else."""
+
+        prompt = f"""Here is a transcript of a YouTube video with timestamps:
+
+{transcript_text}
+
+Find the timestamp when the topic "{request.topic}" is first spoken or discussed.
+Return ONLY the timestamp in HH:MM:SS format (e.g. 00:05:47)."""
 
         response = model.generate_content(
-            [uploaded_file, prompt],
+            prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema={
@@ -79,22 +88,12 @@ Just the timestamp, nothing else."""
         parts = timestamp.split(":")
         if len(parts) == 2:
             timestamp = "00:" + timestamp
-        
+
         return {
             "timestamp": timestamp,
             "video_url": request.video_url,
             "topic": request.topic
         }
 
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=400, detail=f"yt-dlp error: {e.stderr.decode()}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        if uploaded_file:
-            try:
-                genai.delete_file(uploaded_file.name)
-            except:
-                pass
+        raise HTTPException(status_code=400, detail=str(e))
