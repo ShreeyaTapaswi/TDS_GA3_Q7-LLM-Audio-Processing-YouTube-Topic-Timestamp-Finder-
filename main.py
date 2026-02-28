@@ -38,6 +38,8 @@ async def ask(request: AskRequest):
             "--audio-quality", "0",
             "-o", tmp_path,
             "--no-playlist",
+            "--no-check-formats",
+            "--extractor-args", "youtube:player_client=web",
             request.video_url
         ], check=True, capture_output=True)
 
