@@ -45,9 +45,11 @@ async def ask(request: AskRequest):
     try:
         video_id = extract_video_id(request.video_url)
 
-        # New API usage
+        # Fetch any available transcript
         ytt = YouTubeTranscriptApi()
-        transcript_obj = ytt.fetch(video_id)
+        transcript_list = ytt.list(video_id)
+        available_langs = [t.language_code for t in transcript_list]
+        transcript_obj = transcript_list.find_transcript(available_langs).fetch()
         transcript = [{"start": s.start, "text": s.text} for s in transcript_obj]
 
         # Format transcript with timestamps
