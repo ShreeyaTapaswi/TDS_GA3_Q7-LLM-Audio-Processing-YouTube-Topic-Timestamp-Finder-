@@ -2,6 +2,7 @@ import os
 import time
 import tempfile
 import subprocess
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,12 +30,12 @@ async def ask(request: AskRequest):
     
     try:
         # Step 1: Download audio using yt-dlp
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tmp:
             tmp_path = tmp.name
 
         subprocess.run([
             "yt-dlp",
-            "-x", "--audio-format", "mp3",
+            "-x", "--audio-format", "m4a",
             "--audio-quality", "0",
             "-o", tmp_path,
             "--no-playlist",
@@ -43,7 +44,7 @@ async def ask(request: AskRequest):
         ], check=True, capture_output=True)
 
         # Step 2: Upload to Gemini Files API
-        uploaded_file = genai.upload_file(tmp_path, mime_type="audio/mpeg")
+        uploaded_file = genai.upload_file(tmp_path, mime_type="audio/mp4")
 
         # Step 3: Poll until ACTIVE
         while uploaded_file.state.name == "PROCESSING":
@@ -77,7 +78,6 @@ Just the timestamp, nothing else."""
             )
         )
 
-        import json
         result = json.loads(response.text)
         timestamp = result["timestamp"]
 
