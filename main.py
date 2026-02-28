@@ -38,7 +38,7 @@ async def ask(request: AskRequest):
             "--audio-quality", "0",
             "-o", tmp_path,
             "--no-playlist",
-            "--remote-components", "ejsig/hub",
+            "--remote-components", "ejs:github",
             request.video_url
         ], check=True, capture_output=True)
 
