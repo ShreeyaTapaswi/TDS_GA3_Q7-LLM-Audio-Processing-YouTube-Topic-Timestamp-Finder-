@@ -1,13 +1,8 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y curl unzip ffmpeg && \
-    curl -fsSL https://deno.land/install.sh | sh && \
-    ln -s /root/.deno/bin/deno /usr/local/bin/deno
+RUN apt-get update && apt-get install -y curl
 
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
-
-RUN pip install fastapi uvicorn google-generativeai yt-dlp
+RUN pip install fastapi uvicorn google-generativeai youtube-transcript-api
 
 COPY . .
 
