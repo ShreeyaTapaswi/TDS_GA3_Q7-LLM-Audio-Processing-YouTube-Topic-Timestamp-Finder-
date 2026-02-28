@@ -2,8 +2,7 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y curl unzip ffmpeg && \
     curl -fsSL https://deno.land/install.sh | sh && \
-    ln -s /root/.deno/bin/deno /usr/local/bin/deno && \
-    deno --version
+    ln -s /root/.deno/bin/deno /usr/local/bin/deno
 
 ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
